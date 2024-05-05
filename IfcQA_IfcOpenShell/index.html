@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Client-side IFC Viewer</title>
+    <style>
+        html, body {
+            padding: 0;
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+        }
+        body {
+            padding-top: 25vh;
+        }
+        .msg {
+            display: none;
+        }
+        body.loading .msg, body.loading form {
+            display: block;
+        }
+        form {
+            display: inline-block;
+            padding: 1vw 5vw;
+            border: solid 1px #eee;
+            border-radius: 1vw;
+            margin-top: 20px; /* Added margin for better spacing */
+        }
+        #projectName { /* Style for displaying the project name */
+            margin-top: 20px;
+            font-size: 20px;
+            color: #333;
+        }
+        canvas {
+            display: none;
+        }
+        body.rendering canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body class='loading'>
+    <div id='branding'>
+        <img src='http://ifcopenshell.org/static/ifcopenshell_logo.png' height='64' width='auto'>
+        <img src='https://upload.wikimedia.org/wikipedia/commons/1/1f/WebAssembly_Logo.svg' height='64' width='auto'>
+        <br><b>IfcOpenShell</b> WebAssembly
+    </div>
+    <div class='msg'>
+        <div id='status2'></div>
+    </div>
+    <form action='#' onsubmit="return false;">
+        <div>Client-side model viewer</div>
+        <input type='file' id='fileinput'><br>
+        <input type='button' id='btn' value='Load'>
+    </form>
+    <div id="projectName"></div> <!-- Container to display the project name -->
+    <script type="text/javascript">document.querySelector("#status2").innerHTML = "Fetching pyodide";</script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/pyodide/v0.22.0a1/full/pyodide.js"></script>
+    <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.141.0/build/three.module.js",
+                "OrbitControls": "https://unpkg.com/three@0.141.0/examples/jsm/controls/OrbitControls.js"
+            }
+        }
+    </script>
+    <script type="module">
+    
+        let pyodide = null;
+    
+        async function main() {
+            document.querySelector("#status2").innerHTML = "Initializing pyodide";
+            pyodide = await loadPyodide({ indexURL : "https://cdn.jsdelivr.net/pyodide/v0.22.0a1/full/" });
+            document.querySelector("#status2").innerHTML = "Loading package manager";
+            await pyodide.loadPackage("micropip");
+            const micropip = pyodide.pyimport("micropip");
+            document.querySelector("#status2").innerHTML = "Attempting to load IfcOpenShell";
+            
+            try {
+                await micropip.install("http://localhost:3000/ifcopenshell/IfcOpenShell-0.7.0-py3-none-any.whl"); // Ensure this URL is correct
+                console.log("IfcOpenShell loaded.");
+                document.querySelector("#status2").innerHTML = "IfcOpenShell loaded.";
+            } catch (error) {
+                console.error("Failed to load IfcOpenShell:", error);
+                document.querySelector("#status2").innerHTML = "Failed to load IfcOpenShell.";
+            }
+    
+            document.querySelector("input[type=button]").onclick = async () => {
+                document.body.className = 'loading';
+                document.querySelector("#status2").innerHTML = "Processing file...";
+
+                let file = document.querySelector("input[type=file]").files[0];
+                let content = await file.text();
+                let ifcopenshell = pyodide.pyimport('ifcopenshell');
+                let ifc = ifcopenshell.file.from_string(content);
+
+                // Get all building storeys
+                let storeys = ifc.by_type('IfcBuildingStorey');
+                let storey = storeys[0];
+                console.log(storey);
+                
+                document.querySelector("#projectName").innerHTML = "Project Name: " + storey;
+
+
+            }
+        }
+    
+        main();
+    </script>
+    
+   
+</body>
+</html>

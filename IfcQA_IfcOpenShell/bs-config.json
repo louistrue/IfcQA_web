@@ -1,0 +1,11 @@
+{
+    "port": 3000,
+    "files": ["./**/*.{html,htm,css,js}"],
+    "server": {
+      "baseDir": "C:/Users/LouisTrümpler/Documents/GitHub/IfcQA",
+      "routes": {
+        "/ifcopenshell": "C:/Users/LouisTrümpler/Documents/GitHub/IfcQA"
+      }
+    }
+  }
+  
