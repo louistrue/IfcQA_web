@@ -2,121 +2,118 @@ import React, { useState } from 'react';
 import './IFCFileUploader.css'; // Ensure this file has adequate styling
 
 function IFCFileUploader() {
-    const [results, setResults] = useState({
-        checks: Array(15).fill({ value: null, passed: null }),
-        totalCount: 0,
-        proxyCount: 0
-    });
+  const [results, setResults] = useState({
+    projectName: { value: null, passed: null },
+    buildingName: { value: null, passed: null },
+    proxyCount: { value: null, passed: null },
+    storeyNames: { value: [], passed: null },
+    unassignedElements: { value: 0, passed: null }
+  });
+  const [expanded, setExpanded] = useState(false); // State to toggle unassigned elements list
 
-    const handleFileUpload = (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                processIFCContent(content);
-            };
-            reader.readAsText(file);
-        }
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const content = e.target.result;
+        processIFCContent(content);
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const processIFCContent = (content) => {
+    const newResults = {
+      ...results,
+      projectName: checkDefined(extractAttributeValue(content, /IFCPROJECT\('[^']+',#[^,]+,'([^']+)'/i)),
+      buildingName: checkDefined(extractAttributeValue(content, /IFCBUILDING\('[^']+',#[^,]+,'([^']+)'/i)),
+      proxyCount: checkProxyCount(countOccurrences(content, /IFCBUILDINGELEMENTPROXY/gi)),
+      storeyNames: { value: extractBuildingStoreys(content), passed: true },
+      unassignedElements: checkUnassignedElements(countUnassignedElements(content))
     };
-
-    const processIFCContent = (content) => {
-        let newChecks = [...results.checks];
-        const lines = content.split('\n');
-
-        // Rule examples
-        newChecks[0].passed = checkIfcElementFilled(lines, 'IFCPROJECT', 'Name');
-        newChecks[1].passed = checkIfcElementFilled(lines, 'IFCSITE', 'Name');
-        newChecks[2].passed = checkIfcElementFilled(lines, 'IFCBUILDING', 'Name');
-        newChecks[3].passed = checkIfcElementFilled(lines, 'IFCBUILDINGSTOREY', 'Name');
-        newChecks[4].passed = checkObjectRelations(lines, 'BuildingStory');
-        newChecks[5].passed = checkObjectRelations(lines, 'Building', 'IFCBUILDING');
-        newChecks[6].passed = checkObjectRelations(lines, 'Site', 'IFCSITE');
-        newChecks[7].passed = checkObjectRelations(lines, 'Project', 'IFCPROJECT');
-        newChecks[8].passed = checkIfcSpaceNameFilled(lines);
-        newChecks[9].passed = checkAllObjectsHaveAttribute(lines, 'Name');
-        newChecks[10].passed = checkAllObjectsHaveAttribute(lines, 'TypeName');
-        newChecks[11].passed = checkAllObjectsHaveAttribute(lines, 'Description');
-        newChecks[12].passed = checkAllObjectsHaveAttribute(lines, 'MaterialName');
-        newChecks[13].passed = checkIfObjectsHavePredefinedTypeFilled(lines);
-
-        let totalCount = countIfcObjects(lines);
-        let proxyCount = countSpecificType(lines, 'IFCBUILDINGELEMENTPROXY');
-
-        setResults({
-          checks: newChecks,
-          totalCount: countIfcObjects(lines),
-          proxyCount: countSpecificType(lines, 'IFCBUILDINGELEMENTPROXY')
-      });
+    setResults(newResults);
   };
-  
-  const checkObjectRelations = (lines, relationType, elementPrefix) => {
-      const relationRegex = new RegExp(`IFCRELCONTAINS${relationType.toUpperCase()}\\((?:[^)]+), #\\d+\\)`);
-      const elementRegex = new RegExp(`${elementPrefix}\\(`);
-      return lines.filter(line => elementRegex.test(line)).every(elementLine => {
-          const elementId = elementLine.match(/#(\d+)/)[1];
-          return relationRegex.test(lines.join('\n'));
-      });
+
+  const extractAttributeValue = (content, regex) => {
+    const match = content.match(regex);
+    return match ? match[1] : undefined;
   };
-  
-  const checkIfcSpaceNameFilled = (lines) => {
-      const spaceRegex = /IFCSPACE\('[^']+',#[^,]+,'([^']*)'/gi;
-      let match, allFilled = true;
-      while ((match = spaceRegex.exec(lines.join('\n'))) !== null) {
-          if (match[1].trim() === '') allFilled = false;
+
+  const countOccurrences = (content, regex) => {
+    return (content.match(regex) || []).length;
+  };
+
+  const extractBuildingStoreys = (content) => {
+    const regex = /IFCBUILDINGSTOREY\('[^']+',#[^,]+,'([^']+)'/gi;
+    let matches, names = [];
+    while ((matches = regex.exec(content)) !== null) {
+      names.push(matches[1]);
+    }
+    return names;
+  };
+
+  const countUnassignedElements = (content) => {
+    const elementRegex = /IFC(WALLSTANDARDCASE|DOOR|WINDOW|SLAB|COLUMN|BEAM|BUILDINGELEMENTPROXY)\(/gi;
+    let unassignedCount = 0, elementMatch;
+    while ((elementMatch = elementRegex.exec(content)) !== null) {
+      const elementId = content.substring(elementMatch.index).match(/#(\d+)/)[1];
+      if (!new RegExp(`#(${elementId}).*IFCRELCONTAINEDINSPATIALSTRUCTURE`, 'gi').test(content)) {
+        unassignedCount++;
       }
-      return allFilled;
-  };
-  
-  const checkAllObjectsHaveAttribute = (lines, attributeName) => {
-      const objectRegex = new RegExp(`IFC\\w+\\('[^']+',#[^,]+,'([^']*)'`, 'gi');
-      let match, allHaveAttribute = true;
-      while ((match = objectRegex.exec(lines.join('\n'))) !== null) {
-          if (match[1].trim() === '') allHaveAttribute = false;
-      }
-      return allHaveAttribute;
-  };
-  
-  const checkIfObjectsHavePredefinedTypeFilled = (lines) => {
-      const typeRegex = /IFC\w+\((?:[^,]+,){11}'PredefinedType=([^']*)'/gi;
-      let match, allFilled = true;
-      while ((match = typeRegex.exec(lines.join('\n'))) !== null) {
-          if (match[1].trim() === '') allFilled = false;
-      }
-      return allFilled;
+    }
+    return unassignedCount;
   };
 
-    const checkIfcElementFilled = (lines, elementType, attribute) => {
-        const regex = new RegExp(`${elementType}.*'([^']+)'`);
-        return lines.some(line => regex.test(line));
-    };
+  const checkDefined = (value) => ({
+    value,
+    passed: !!value
+  });
 
-    const countIfcObjects = (lines) => {
-        return lines.filter(line => line.startsWith('IFC')).length;
-    };
+  const checkProxyCount = (count) => ({
+    value: count,
+    passed: count === 0
+  });
 
-    const countSpecificType = (lines, typeName) => {
-        return lines.filter(line => line.includes(typeName)).length;
-    };
+  const checkUnassignedElements = (count) => ({
+    value: count,
+    passed: count === 0
+  });
 
+  const toggleExpanded = () => setExpanded(!expanded); // Toggle for expanding/collapsing
 
-    return (
-        <div>
-            <input type="file" accept=".ifc" onChange={handleFileUpload} />
-            <div className="results">
-                <h2>IFC File Analysis</h2>
-                <ul>
-                    {results.checks.map((check, index) => (
-                        <li key={index} className="check-item">
-                            {`Rule ${index + 1}: ${check.passed ? 'Yes' : 'No'}`}
-                        </li>
-                    ))}
-                </ul>
-                <p>Total IFC Objects: {results.totalCount}</p>
-                <p>IFC Building Element Proxy Count: {results.proxyCount}</p>
-            </div>
-        </div>
-    );
+  return (
+    <div>
+      <input type="file" accept=".ifc" onChange={handleFileUpload} />
+      <div className="results">
+        <h2>IFC File Checks</h2>
+        <ul>
+          {Object.keys(results).map(key => (
+            <li key={key} className={`rule-item ${key}`}>
+              {key.replace(/([A-Z])/g, ' $1').trim()}:
+              {key === 'storeyNames' ? 
+                <ul className="nested">{results.storeyNames.value.map((name, index) => <li key={index}>{name}</li>)}</ul> :
+                key === 'unassignedElements' && results.unassignedElements.value > 0 ? 
+                <div>
+                  <button onClick={toggleExpanded} className="expand-button">
+                    {expanded ? 'Collapse' : 'Expand'} List
+                  </button>
+                  {expanded && <ul className="nested">
+                    {Array.from({ length: results.unassignedElements.value }, (_, i) => <li key={i}>Element {i + 1}</li>)}
+                  </ul>}
+                </div> :
+                results[key].passed !== null ? (
+                  results[key].passed ? 
+                  <span className="passed">{(results[key].value || '').toString()} &#x2714;</span> : 
+                  <span className="failed">{(results[key].value || '').toString()} &#x2716;</span>
+                ) : <span className="pending">Pending check...</span>
+              }
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 export default IFCFileUploader;
