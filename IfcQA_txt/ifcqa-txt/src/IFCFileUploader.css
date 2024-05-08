@@ -1,0 +1,53 @@
+.results {
+  margin-top: 20px;
+  text-align: left;
+}
+
+.results ul, .results .nested {
+  list-style-type: none;
+  padding-left: 0;
+}
+
+.results li {
+  margin-bottom: 10px;
+}
+
+.nested {
+  margin-left: 20px;
+  color: green; /* Green color for nested items */
+}
+
+.passed {
+  color: green;
+  font-weight: bold;
+}
+
+.failed {
+  color: red;
+  font-weight: bold;
+}
+
+.pending {
+  color: orange;
+}
+
+.expand-button {
+  background-color: #f0f0f0;
+  border: none;
+  cursor: pointer;
+  padding: 5px 10px;
+  margin: 5px 0;
+}
+
+.overall-result {
+  font-size: 18px;
+  margin-top: 15px;
+}
+
+.overall-result.passed {
+  color: green;
+}
+
+.overall-result.failed {
+  color: red;
+}
