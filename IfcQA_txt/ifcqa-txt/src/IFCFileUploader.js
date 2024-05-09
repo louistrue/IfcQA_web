@@ -1,6 +1,7 @@
+import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import React, { useState } from 'react';
 import './IFCFileUploader.css';
-import { rules } from './rules';  
+import { rules } from './rules';
 
 function IFCFileUploader() {
     const [results, setResults] = useState([]);
@@ -18,10 +19,10 @@ function IFCFileUploader() {
 
     const processContentChunk = (chunk, isLastChunk, totalSize, currentOffset) => {
         let combinedResults = rules.map(rule => {
-            const partialResult = rule.process(chunk, rule.regex);
+            const partialResult = rule.process(chunk, rule.regex) || [];
             return {
                 name: rule.name,
-                partialResult: partialResult,
+                partialResult: Array.isArray(partialResult) ? partialResult : [partialResult],
                 isLastChunk: isLastChunk
             };
         });
@@ -36,18 +37,10 @@ function IFCFileUploader() {
     const combineResults = (prevResults, newResults, isLastChunk) => {
         let updatedResults = prevResults.length > 0 ? [...prevResults] : newResults.map(res => ({
             name: res.name,
-            result: { value: res.partialResult || null, passed: false }  
+            result: { value: res.partialResult || [], passed: false }
         }));
 
         newResults.forEach((newResult, index) => {
-            if (typeof newResult.partialResult === 'number') {
-                updatedResults[index].result.value += newResult.partialResult;
-            } else if (Array.isArray(newResult.partialResult)) {
-                updatedResults[index].result.value = [...(updatedResults[index].result.value || []), ...newResult.partialResult];
-            } else {
-                updatedResults[index].result.value = newResult.partialResult || updatedResults[index].result.value;
-            }
-
             if (isLastChunk) {
                 updatedResults[index].result.passed = rules[index].check(updatedResults[index].result.value).passed;
             }
@@ -66,7 +59,6 @@ function IFCFileUploader() {
         fileReader.onload = (e) => {
             const chunk = e.target.result;
             processContentChunk(chunk, offset + chunkSize >= totalSize, totalSize, offset + chunkSize);
-
             offset += chunkSize;
             if (offset < totalSize) {
                 readNextChunk();
@@ -85,40 +77,65 @@ function IFCFileUploader() {
         readNextChunk();
     };
 
+
     const toggleExpanded = (ruleName) => {
         setExpandedRule(expandedRule === ruleName ? null : ruleName);
     };
 
-    return (
-        <div>
-            <input type="file" accept=".ifc" onChange={handleFileUpload} />
-            {fileProcessing && <div className="progress-bar">
-                <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
-            </div>}
-            <div className="results">
-                <h2>IFC File Checks</h2>
-                <ul>
-                    {results.map((rule, index) => (
+return (
+    <div>
+        <input type="file" accept=".ifc" onChange={handleFileUpload} />
+        {fileProcessing && <div className="progress-bar">
+            <div className="progress-bar-fill" style={{ width: `${progress}%` }}></div>
+        </div>}
+        <div className="results">
+            <h2>IFC File Checks</h2>
+            <ul>
+                {results.map((rule, index) => {
+                    const shouldShowExpansion = (rule) => {
+                        return rule.result.value.length > 0 && (rule.name === 'Storey Names' || !rule.result.passed) && !['Project Name', 'Site Name', 'Building Name'].includes(rule.name);
+                    };
+
+                    return (
                         <li key={index} className={`rule-item ${rule.name.toLowerCase().replace(/ /g, '-')}`}>
                             {rule.name}:
-                            {fileProcessing ? <span className="processing">Processing...</span> : 
-                             rule.result.passed ? <span className="passed">&#x2714;</span> : <span className="failed">&#x2716;</span>}
-                            {rule.result.value && Array.isArray(rule.result.value) ? (
-                                <button onClick={() => toggleExpanded(rule.name)} className="expand-toggle">{expandedRule === rule.name ? 'Collapse' : 'Expand'}</button>
+                            {fileProcessing ? (
+                                <span className="processing">❌</span>
                             ) : (
-                                <span> ({rule.result.value ? rule.result.value.toString() : 'N/A'})</span>
+                                <>
+                                {['Project Name', 'Building Name', 'Site Name'].includes(rule.name) ? (
+                                    <span style={{ color: 'green' }}>
+                                        {rule.result.passed ? `(${[...new Set(rule.result.value)].join(', ')})` : <span className="failed">&#x2716;</span>}
+                                    </span>
+                                ) : (
+                                    rule.result.passed ? <span className="passed">&#x2714;</span> : <span className="failed">&#x2716;</span>
+                                )}
+                                </>
                             )}
-                            {expandedRule === rule.name && (
+                            {shouldShowExpansion(rule) && (
+                                <button onClick={() => toggleExpanded(rule.name)} className="expand-toggle">
+                                    {expandedRule === rule.name ? '☝️' : '👇'}
+                                    <ExpandMoreIcon style={{ transform: expandedRule === rule.name ? 'rotate(180deg)' : 'rotate(0deg)' }} />
+                                </button>
+                            )}
+                            {expandedRule === rule.name && Array.isArray(rule.result.value) && (
                                 <ul className="nested">
-                                    {rule.result.value.map((item, i) => <li key={i}>{item}</li>)}
+                                    {rule.result.value.map((item, i) => (
+                                        <li key={i}>
+                                            <div>GlobalId: {item.globalId}</div>
+                                            <div>Name: {item.name}</div>
+                                        </li>
+                                    ))}
                                 </ul>
                             )}
+                            
                         </li>
-                    ))}
-                </ul>
-            </div>
+                    );
+                })}
+            </ul>
         </div>
-    );
+    </div>
+);
 }
 
 export default IFCFileUploader;

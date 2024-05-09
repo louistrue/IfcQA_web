@@ -1,36 +1,48 @@
 // Utility functions that are used in the rules
 function extractAttributeValue(content, regex) {
     const match = content.match(regex);
+    console.log('Extracted Value:', match ? match[1] : "None");  // This will show what is being extracted
     return match ? match[1] : undefined;
 }
+
 
 function countOccurrences(content, regex) {
     return (content.match(regex) || []).length;
 }
 
-function extractBuildingStoreys(content, regex) {
-    let matches, names = [];
-    while ((matches = regex.exec(content)) !== null) {
-        names.push(matches[1]);
-    }
-    return names;
-}
 
 function countUnassignedElements(content, regex) {
     let unassignedDetails = [], elementMatch;
     while ((elementMatch = regex.exec(content)) !== null) {
-        const elementId = content.substring(elementMatch.index).match(/#(\d+)/)[1];
+        const elementContent = content.substring(elementMatch.index);
+        const elementId = elementContent.match(/#(\d+)/)[1];
         if (!new RegExp(`#(${elementId}).*IFCRELCONTAINEDINSPATIALSTRUCTURE`, 'gi').test(content)) {
-            // Assuming that we can extract a name or other identifier the same way
-            const nameMatch = content.substring(elementMatch.index).match(/'([^']*)'/); // Adjust regex as necessary
             unassignedDetails.push({
-                id: elementId,
-                name: nameMatch ? nameMatch[1] : "Unnamed Element"
+                globalId: extractIFCAttribute(elementContent, 1), // GlobalId is the first quoted string
+                name: extractIFCAttribute(elementContent, 3) || "Unnamed Element" // Name is the third quoted string
             });
         }
     }
-    return unassignedDetails; // Return an array of details about unassigned elements
+    return unassignedDetails;
 }
+
+function extractBuildingStoreys(content) {
+    const storeyRegex = /IFCBUILDINGSTOREY\('([^']+)',#[^,]+,'([^']*)'/g;
+    let storeyDetails = [];
+    let match;
+
+    while ((match = storeyRegex.exec(content)) !== null) {
+        storeyDetails.push({
+            globalId: match[1], // GlobalId is the first quoted value
+            name: match[2]      // Name is the third quoted value
+        });
+    }
+
+    return storeyDetails;
+}
+
+
+
 
 
 function checkDefined(value) {
@@ -40,23 +52,33 @@ function checkDefined(value) {
     };
 }
 
-function checkProxyCount(count) {
-    return {
-        value: count,
-        passed: count === 0
-    };
-}
-
-
-function checkIfcSpaceNames(content, regex) {
-    let matches, missingNames = 0;
-    while ((matches = regex.exec(content)) !== null) {
-        if (!matches[1]) {
-            missingNames++;
-        }
+function extractProxies(content) {
+    const proxyRegex = /IFCBUILDINGELEMENTPROXY\('([^']+)',#\d+,'([^']*)'/g;
+    let proxies = [];
+    let match;
+    while ((match = proxyRegex.exec(content)) !== null) {
+        proxies.push({
+            globalId: match[1],
+            name: match[2] || "Unnamed Proxy" // Provide a default name if none is extracted
+        });
     }
-    return missingNames === 0; // Return true if no missing names
+    return proxies;
 }
+
+function extractSpaceNames(content) {
+    const spaceRegex = /IFCSPACE\('([^']+)',#[^,]+,'([^']*)'/g;
+    let spaces = [];
+    let match;
+
+    while ((match = spaceRegex.exec(content)) !== null) {
+        spaces.push({
+            globalId: match[1],
+            name: match[2] || "Unnamed Space" // Provide a fallback for unnamed spaces
+        });
+    }
+    return spaces;
+}
+
 
 function checkObjectRelations(content, objectRegex, relationRegex) {
     let objectMatches = content.match(objectRegex) || [];
@@ -69,6 +91,21 @@ function checkObjectRelations(content, objectRegex, relationRegex) {
     });
 }
 
+function extractIFCAttribute(content, position) {
+    // This function extracts an attribute based on its position in the list of quoted values.
+    const regex = /'([^']*)'/g;
+    let currentMatch;
+    let index = 0;
+
+    while ((currentMatch = regex.exec(content)) !== null) {
+        index += 1;
+        if (index === position) {
+            return currentMatch[1];  // Returns the matched group which is the content inside quotes
+        }
+    }
+    return undefined; // Returns undefined if the position is not found
+}
+
 
 // Rule definitions
 export const rules = [
@@ -76,7 +113,7 @@ export const rules = [
         name: 'Project Name',
         regex: /IFCPROJECT\('[^']+',#[^,]+,'([^']+)'/i,
         process: extractAttributeValue,
-        check: checkDefined
+        check: value => ({ value, passed: !!value })  // Ensure value exists to pass
     },
     {
         name: 'Objects related to Project',
@@ -88,7 +125,7 @@ export const rules = [
         name: 'Site Name',
         regex: /IFCSITE\('[^']+',#[^,]+,'([^']+)'/i,
         process: extractAttributeValue,
-        check: checkDefined
+        check: value => ({ value, passed: !!value })  // Ensure value exists to pass
     },
     {
         name: 'Objects related to Site',
@@ -100,7 +137,7 @@ export const rules = [
         name: 'Building Name',
         regex: /IFCBUILDING\('[^']+',#[^,]+,'([^']+)'/i,
         process: extractAttributeValue,
-        check: checkDefined
+        check: value => ({ value, passed: !!value })  // Ensure value exists to pass
     },
     {
         name: 'Objects related to Building',
@@ -126,18 +163,17 @@ export const rules = [
         process: countUnassignedElements,
         check: value => ({ value, passed: value.length === 0 })  // Adjust to check that the array is empty for passing
     },
-    
     {
-        name: 'Proxy Count',
-        regex: /IFCBUILDINGELEMENTPROXY/gi,
-        process: countOccurrences,
-        check: checkProxyCount
+        name: 'Space Names',
+        regex: /IFCSPACE\(/gi,
+        process: extractSpaceNames,
+        check: spaces => ({ value: spaces, passed: spaces.length === 0 }) // Passes if no spaces found
     },
     {
-        name: 'IfcSpaces with Names',
-        regex: /IFCSPACE\('[^']+',#[^,]+,'([^']*)'/gi,
-        process: (content, regex) => countOccurrences(content, regex) - checkIfcSpaceNames(content, regex),
-        check: count => ({ value: count, passed: count === 0 })
+        name: 'Proxy Count',
+        regex: /IFCBUILDINGELEMENTPROXY\(/gi,
+        process: extractProxies,
+        check: proxies => ({ value: proxies, passed: proxies.length === 0 }) // Update logic as needed
     },
 
 
