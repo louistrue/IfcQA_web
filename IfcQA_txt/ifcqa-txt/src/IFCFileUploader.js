@@ -10,6 +10,7 @@ function IFCFileUploader() {
     const [fileProcessing, setFileProcessing] = useState(false);
 
     const handleFileUpload = (event) => {
+        setResults([]);
         const file = event.target.files[0];
         if (file) {
             setFileProcessing(true);
@@ -92,8 +93,14 @@ return (
             <h2>IFC File Checks</h2>
             <ul>
                 {results.map((rule, index) => {
+                    const isNameEmpty = ['Project Name', 'Building Name', 'Site Name'].includes(rule.name) && rule.result.value === '';
+                    // If the rule name is 'Project Name' or 'Building Name' and its value is empty, set rule.result.passed to false
+                    if (isNameEmpty) {
+                        rule.result.passed = false;
+                    }
+
                     const shouldShowExpansion = (rule) => {
-                        return rule.result.value.length > 0 && (rule.name === 'Storey Names' || !rule.result.passed) && !['Project Name', 'Site Name', 'Building Name'].includes(rule.name);
+                        return rule.result.value.length > 0 && (rule.name === 'Storey Names' || !rule.result.passed);
                     };
 
                     return (
