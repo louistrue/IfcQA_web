@@ -31,13 +31,6 @@
   color: orange;
 }
 
-.expand-button {
-  background-color: #f0f0f0;
-  border: none;
-  cursor: pointer;
-  padding: 5px 10px;
-  margin: 5px 0;
-}
 
 .overall-result {
   font-size: 18px;
@@ -50,4 +43,45 @@
 
 .overall-result.failed {
   color: red;
+}
+
+.progress-bar {
+  width: 100%;
+  background-color: #ddd;
+  border-radius: 5px;
+  margin: 20px 0;
+}
+
+.progress-bar-fill {
+  height: 20px;
+  background-color: #4CAF50; /* Green */
+  text-align: center; /* Center the text (if any) inside the bar */
+  line-height: 20px; /* Align the text vertically */
+  color: white;
+  width: 0%; /* Initial width */
+  border-radius: 5px;
+}
+
+
+.expand-toggle {
+  background: none;
+  border: none;
+  color: blue;
+  cursor: pointer;
+  padding-left: 5px;
+}
+
+.nested {
+  list-style: none;
+  padding-left: 20px;
+}
+
+.nested li {
+  margin-top: 5px;
+  font-size: 14px;
+}
+
+.nested small {
+  font-size: 12px;
+  color: gray;
 }
