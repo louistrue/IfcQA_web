@@ -5,26 +5,25 @@ function extractAttributeValue(content, regex) {
     return match ? match[1] : undefined;
 }
 
+function countElementsWithoutStorey(content, regex) {
+    let unassignedDetails = [];
+    let elementMatch;
 
-function countOccurrences(content, regex) {
-    return (content.match(regex) || []).length;
-}
-
-
-function countUnassignedElements(content, regex) {
-    let unassignedDetails = [], elementMatch;
     while ((elementMatch = regex.exec(content)) !== null) {
-        const elementContent = content.substring(elementMatch.index);
-        const elementId = elementContent.match(/#(\d+)/)[1];
-        if (!new RegExp(`#(${elementId}).*IFCRELCONTAINEDINSPATIALSTRUCTURE`, 'gi').test(content)) {
+        const elementId = elementMatch[0].match(/#(\d+)/)[1];
+        // Update to check if the element is contained in any spatial structure
+        const containedRegex = new RegExp(`IFCRELCONTAINEDINSPATIALSTRUCTURE\\([^,]*,\\s*[^,]*,\\s*\\((?:[^)]*#)?${elementId}(?:,|\\))`, 'gi');
+
+        if (!content.match(containedRegex)) {
             unassignedDetails.push({
-                globalId: extractIFCAttribute(elementContent, 1), // GlobalId is the first quoted string
-                name: extractIFCAttribute(elementContent, 3) || "Unnamed Element" // Name is the third quoted string
+                globalId: extractIFCAttribute(elementMatch[0], 1), // Assuming the first quoted string after the match is the GlobalId
+                name: extractIFCAttribute(elementMatch[0], 3) || "Unnamed Element" // Assuming the third quoted string is the Name
             });
         }
     }
     return unassignedDetails;
 }
+
 
 function extractBuildingStoreys(content) {
     const storeyRegex = /IFCBUILDINGSTOREY\('([^']+)',#[^,]+,'([^']*)'/g;
@@ -39,17 +38,6 @@ function extractBuildingStoreys(content) {
     }
 
     return storeyDetails;
-}
-
-
-
-
-
-function checkDefined(value) {
-    return {
-        value,
-        passed: !!value
-    };
 }
 
 function extractProxies(content) {
@@ -78,7 +66,6 @@ function extractSpaceNames(content) {
     }
     return spaces;
 }
-
 
 function checkObjectRelations(content, objectRegex, relationRegex) {
     let objectMatches = content.match(objectRegex) || [];
@@ -153,16 +140,13 @@ export const rules = [
     },
     {
         name: 'Objects related to BuildingStory',
-        regex: /IFC(WALLSTANDARDCASE|DOOR|WINDOW|SLAB|COLUMN|BEAM|BUILDINGELEMENTPROXY)/gi,
-        process: (content, regex) => checkObjectRelations(content, regex, 'IFCBUILDINGSTOREY'),
-        check: passed => ({ value: passed, passed })
-    },
-    {
-        name: 'Unassigned Elements',
-        regex: /IFC(WALLSTANDARDCASE|DOOR|WINDOW|SLAB|COLUMN|BEAM|BUILDINGELEMENTPROXY)\(/gi,
-        process: countUnassignedElements,
-        check: value => ({ value, passed: value.length === 0 })  // Adjust to check that the array is empty for passing
-    },
+        regex: /IFC(WALLSTANDARDCASE|DOOR|WINDOW|SLAB|COLUMN|BEAM|BUILDINGELEMENTPROXY)\('([^']+)',#\d+,'([^']*)'/gi,
+        process: countElementsWithoutStorey,
+        check: value => ({
+            value: value,
+            passed: value.length === 0 // Check passes if no unassigned elements found
+        })
+    },   
     {
         name: 'Space Names',
         regex: /IFCSPACE\(/gi,
