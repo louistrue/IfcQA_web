@@ -6,23 +6,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>xeokit IFC Viewer</title>
     <style>
-      body {
+      body,
+      html {
         margin: 0;
+        height: 100%;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      #container {
+        position: relative;
         width: 100%;
         height: 100%;
-        user-select: none;
       }
       #myCanvas {
         width: 100%;
         height: 100%;
-        position: absolute;
         background: lightblue;
         background-image: linear-gradient(lightblue, white);
       }
-      #uploadButton {
+      #modelTree {
         position: absolute;
         top: 10px;
         left: 10px;
+        width: 300px;
+        max-height: 400px;
+        overflow-y: auto;
+        background: rgba(240, 240, 240, 0.9);
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 10px;
+        z-index: 20;
+      }
+      #uploadButton {
+        position: fixed;
+        top: 10px;
+        right: 10px;
         z-index: 10;
         background-color: #4caf50;
         color: white;
@@ -35,12 +54,16 @@
   </head>
   <body>
     <input type="file" id="uploadButton" accept=".ifc" />
-    <canvas id="myCanvas"></canvas>
+    <div id="container">
+      <canvas id="myCanvas"></canvas>
+      <div id="modelTree"></div>
+    </div>
   </body>
   <script id="source" type="module">
     import {
       Viewer,
       WebIFCLoaderPlugin,
+      TreeViewPlugin,
     } from "https://cdn.jsdelivr.net/npm/@xeokit/xeokit-sdk/dist/xeokit-sdk.es.min.js";
     import * as WebIFC from "https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.js";
 
@@ -68,10 +91,17 @@
         IfcAPI,
       });
 
+      // Initialize TreeViewPlugin for model tree
+      const treeView = new TreeViewPlugin(viewer, {
+        containerElement: document.getElementById("modelTree"),
+        autoExpandDepth: 2,
+      });
+
       // Function to load an IFC model from an ArrayBuffer
       const loadIFCModel = (arrayBuffer) => {
         if (currentModel) {
           currentModel.destroy(); // Dispose of the existing model
+          treeView.removeModel(currentModel.id); // Remove the current model from the tree
         }
 
         const model = webIFCLoader.load({
@@ -84,6 +114,11 @@
         model.on("loaded", () => {
           currentModel = model; // Track the newly loaded model
           console.log("IFC model loaded successfully");
+
+          // Automatically zoom to fit the model
+          viewer.cameraFlight.flyTo({
+            worldAABB: model.worldAABB,
+          });
         });
 
         model.on("error", (error) => {
